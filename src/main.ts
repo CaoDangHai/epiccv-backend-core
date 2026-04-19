@@ -24,10 +24,11 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3001;
   await app.listen(port);
-  console.log(`Application is running on: http://localhost:${port}`);
+  console.log(`🚀 Application is running on: http://localhost:${port}`);
+  console.log(`📚 Swagger UI: http://localhost:${port}/api`);
 }
 
 bootstrap().catch((err) => {
-  console.error('Failed to start application:', err);
+  console.error('❌ Failed to start application:', err);
   process.exit(1);
 });
