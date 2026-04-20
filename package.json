@@ -23,7 +23,7 @@
     "migration:generate": "typeorm migration:generate",
     "migration:run": "typeorm migration:run",
     "migration:revert": "typeorm migration:revert",
-    "prepare": "husky install",
+    "prepare": "husky",
     "husky:add-hooks": "husky add .husky/pre-commit 'yarn lint-staged' && husky add .husky/pre-push 'yarn lint:check'"
   },
   "dependencies": {
