@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:13 
+    ports:
+      - '5434:5432' #cổng máy mình : cổng máy ảo. Kết nối pg Admin là lấy cổng mình
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123
+      POSTGRES_DB: epiccv_db
+    networks:
+      - epiccv
+networks:
+  epiccv:
+    
