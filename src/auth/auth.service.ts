@@ -194,6 +194,7 @@ export class AuthService {
   private async validateAndSaveUser(
     userInfo: MezonUserInfoDto,
   ): Promise<Candidate> {
+    console.log(userInfo);
     // 1. Ép kiểu rõ ràng về chuỗi (string) để ESLint không vặn vẹo
     const mezonId: string = String(userInfo.mezon_id || userInfo.sub || '');
     const email: string | null = userInfo.email ? String(userInfo.email) : null;

@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { CvModule } from './cv/cv.module';
 
 // Import tất cả Entity để đăng ký
 import { Candidate } from './database/entities/candidate.entity';
@@ -45,6 +46,7 @@ import { RoadmapResource } from './database/entities/roadmap-resource.entity';
       RoadmapResource,
     ]),
     AuthModule,
+    CvModule,
   ],
   controllers: [AppController],
   providers: [AppService],
