@@ -9,7 +9,7 @@ interface AuthRequest extends Request {
   user: Record<string, unknown>; // user là một Object có key là string, giá trị chưa biết
 }
 
-export const GetUser = createParamDecorator(
+export const GetCandidate = createParamDecorator(
   (
     data: string | undefined,
     ctx: ExecutionContext,

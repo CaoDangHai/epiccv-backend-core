@@ -1,46 +1,215 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client-js" 
+  provider = "prisma-client-js"
 }
 
-// 2. Nguồn dữ liệu (Datasource)
 datasource db {
   provider = "postgresql"
-  url = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
-model User{
-  id Int @id @default(autoincrement())
-  createdAt DateTime @default(now())
-  updateAt DateTime @updatedAt
-
-  email String @unique
-  hash String
-
-  firstName String?
-  lastName String?
-
-  bookmarks Bookmark[]
-  @@map("users")
+// ==========================================
+// 0. ĐỊNH NGHĨA CÁC KIỂU ENUM
+// ==========================================
+enum SkillLevel {
+  Beginner
+  Intermediate
+  Advanced
+  Expert
+  Unknown
 }
 
-model Bookmark{
-  id Int @id @default(autoincrement())
-  createdAt DateTime @default(now())
-  updateAt DateTime @updatedAt
-
-  title String
-  description String?
-  link String
-
-
-  userId Int
-  user User @relation(fields: [userId], references: [id])
-
-  @@map("bookmarks")
+enum RequirementPriority {
+  Critical
+  Essential
+  Desirable
 }
 
+enum MatchStatus {
+  Full_Match    @map("Full Match")
+  Partial_Match @map("Partial Match")
+  Missing
+  Exceeds
+}
+
+// ==========================================
+// 2. MASTER DATA
+// ==========================================
+model Skill {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique @db.VarChar(100)
+  category  String   @default("Technical") @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  cvSkills  CvSkill[]
+  jdSkills  JdSkill[]
+
+  @@map("skills")
+}
+
+// ==========================================
+// 3. PHÂN HỆ CORE: CANDIDATE & CV
+// ==========================================
+model Candidate {
+  id          String   @id @default(uuid())
+  fullName    String   @map("full_name") @db.VarChar(255)
+  email       String   @unique @db.VarChar(255)
+  phoneNumber String?  @map("phone_number") @db.VarChar(20)
+  address     String?  @db.Text
+  age         Int?
+  socialLinks Json?    @map("social_links") // LinkedIn, Github...
+  createdAt   DateTime @default(now()) @map("created_at")
+  hash  String
+
+  cvs CurriculumVitae[]
+
+  @@map("candidates")
+}
+
+model CurriculumVitae {
+  id             String   @id @default(uuid())
+  candidateId    String   @map("candidate_id")
+  candidate      Candidate @relation(fields: [candidateId], references: [id])
+  
+  summary        String?  @db.Text
+  totalExpYears  Decimal  @default(0.0) @map("total_exp_years") @db.Decimal(4, 1)
+  workHistory    Json?    @map("work_history")
+  education      Json?
+  projects       Json?
+  certifications Json?
+  languages      Json?
+  topStrengths   Json?    @map("top_strengths")
+  parsedData     Json     @map("parsed_data") // Blob cho LLM
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  cvSkills        CvSkill[]
+  analysisResults AnalysisResult[]
+
+  @@map("curriculum_vitaes")
+}
+
+// Bảng trung gian CV <-> Skill (N:N)
+model CvSkill {
+  cvId              String      @map("cv_id")
+  skillId           Int         @map("skill_id")
+  levelName         SkillLevel  @default(Unknown) @map("level_name")
+  yearsOfExperience Decimal     @default(0.0) @map("years_of_experience") @db.Decimal(4, 1)
+
+  cv    CurriculumVitae @relation(fields: [cvId], references: [id])
+  skill Skill           @relation(fields: [skillId], references: [id])
+
+  @@id([cvId, skillId])
+  @@map("cv_skills")
+}
+
+// ==========================================
+// 4. PHÂN HỆ CORE: JOB DESCRIPTION (JD)
+// ==========================================
+model JobDescription {
+  id             String   @id @default(uuid())
+  jobTitle       String   @map("job_title") @db.VarChar(255)
+  companyName    String?  @map("company_name") @db.VarChar(255)
+  jobType        String?  @map("job_type") @db.VarChar(50)
+  salaryRange    Json?    @map("salary_range")
+  experienceReqs Json?    @map("experience_reqs")
+  projectReqs    Json?    @map("project_reqs")
+  cultureFit     Json?    @map("culture_fit")
+  parsedData     Json     @map("parsed_data")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  jdSkills        JdSkill[]
+  analysisResults AnalysisResult[]
+
+  @@map("job_descriptions")
+}
+
+model JdSkill {
+  jdId     String              @map("jd_id")
+  skillId  Int                 @map("skill_id")
+  minLevel SkillLevel          @default(Beginner) @map("min_level")
+  priority RequirementPriority @default(Essential)
+
+  jd    JobDescription @relation(fields: [jdId], references: [id])
+  skill Skill          @relation(fields: [skillId], references: [id])
+
+  @@id([jdId, skillId])
+  @@map("jd_skills")
+}
+
+// ==========================================
+// 5. PHÂN HỆ MATCHING & ANALYSIS
+// ==========================================
+model AnalysisResult {
+  id                 String   @id @default(uuid())
+  cvId               String   @map("cv_id")
+  jdId               String   @map("jd_id")
+  isQualified        Boolean  @default(false) @map("is_qualified")
+  matchPercentage    Decimal? @map("match_percentage") @db.Decimal(5, 2)
+  overallAssessment  Json?    @map("overall_assessment")
+  experienceAlignment String?  @map("experience_alignment") @db.Text
+  totalYearsGap      Decimal? @map("total_years_gap") @db.Decimal(4, 1)
+  cultureFitAnalysis Json?    @map("culture_fit_analysis")
+  matchedSkills      Json?    @map("matched_skills_summary")
+  missingSkills      Json?    @map("missing_skills_summary")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  cv CurriculumVitae @relation(fields: [cvId], references: [id])
+  jd JobDescription  @relation(fields: [jdId], references: [id])
+
+  roadmap Roadmap?
+
+  @@map("analysis_results")
+}
+
+// ==========================================
+// 6. PHÂN HỆ ROADMAP
+// ==========================================
+model Roadmap {
+  id                String   @id @default(uuid())
+  analysisResultId  String   @unique @map("analysis_result_id")
+  targetJobTitle    String?  @map("target_job_title") @db.VarChar(255)
+  summary           String?  @db.Text
+  difficulty        String   @default("Intermediate") @db.VarChar(50)
+  estimatedTotalTime String? @map("estimated_total_time") @db.VarChar(50)
+  finalOutcomes     Json?    @map("final_outcomes")
+  mentorAdvice      String?  @map("mentor_advice") @db.Text
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  analysisResult AnalysisResult @relation(fields: [analysisResultId], references: [id])
+  steps          RoadmapStep[]
+
+  @@map("roadmaps")
+}
+
+model RoadmapStep {
+  id                String   @id @default(uuid())
+  roadmapId         String   @map("roadmap_id")
+  orderIndex        Int      @map("order_index")
+  title             String   @db.VarChar(255)
+  description       String?  @db.Text
+  uiColor           String   @default("primary") @map("ui_color") @db.VarChar(50)
+  estimatedDuration String?  @map("estimated_duration") @db.VarChar(50)
+  keyTopics         Json?    @map("key_topics")
+  linkedSkillGaps   Json?    @map("linked_skill_gaps")
+  isCompleted       Boolean  @default(false) @map("is_completed")
+
+  roadmap   Roadmap           @relation(fields: [roadmapId], references: [id])
+  resources RoadmapResource[]
+
+  @@map("roadmap_steps")
+}
+
+model RoadmapResource {
+  id            String  @id @default(uuid())
+  roadmapStepId String  @map("roadmap_step_id")
+  title         String  @db.VarChar(255)
+  resourceType  String  @default("Documentation") @map("resource_type") @db.VarChar(50)
+  url           String  @db.Text
+  provider      String? @db.VarChar(100)
+  duration      String? @db.VarChar(50)
+  isFree        Boolean @default(true) @map("is_free")
+  description   String? @db.Text
+
+  step RoadmapStep @relation(fields: [roadmapStepId], references: [id])
+
+  @@map("roadmap_resources")
+}
