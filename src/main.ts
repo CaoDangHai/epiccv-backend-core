@@ -1,18 +1,27 @@
+// src/main.ts
 import { NestFactory } from '@nestjs/core';
-// import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import session from 'express-session';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
+
+  app.use(
+    session({
+      secret:
+        process.env.SESSION_SECRET ??
+        'dev-secret-change-in-prod',
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        maxAge: 60000, // 1 phút là đủ, chỉ cần tồn tại trong lúc OAuth flow
+        secure:
+          process.env.NODE_ENV === 'production',
+      },
     }),
   );
+
   await app.listen(3333);
 }
 
-bootstrap().catch((err) => {
-  console.error(err);
-});
+bootstrap();

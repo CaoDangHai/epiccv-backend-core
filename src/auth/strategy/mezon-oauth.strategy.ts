@@ -11,7 +11,7 @@ import { mezonOAuthConfig } from '../../config/oauth.config';
 interface MezonUserInfo {
   sub: string;
   email: string;
-  name?: string;
+  username: string;
 }
 
 interface OAuthUser {
@@ -33,7 +33,7 @@ export class MezonOAuthStrategy extends PassportStrategy(
   );
 
   constructor() {
-    super({
+    const config = {
       authorizationURL:
         mezonOAuthConfig.authorizationURL,
       callbackURL: mezonOAuthConfig.callbackURL,
@@ -41,7 +41,12 @@ export class MezonOAuthStrategy extends PassportStrategy(
       clientSecret: mezonOAuthConfig.clientSecret,
       state: true,
       tokenURL: mezonOAuthConfig.tokenURL,
-    });
+    };
+
+    console.log('=== MEZON OAUTH CONFIG ===');
+    console.log(config); // xem callbackURL thực tế là gì
+
+    super(config);
   }
 
   async validate(
@@ -54,7 +59,7 @@ export class MezonOAuthStrategy extends PassportStrategy(
     return {
       accessToken,
       email: userInfo.email,
-      fullName: userInfo.name ?? userInfo.email,
+      fullName: userInfo.username,
       id: userInfo.sub,
       mezonId: userInfo.sub,
       refreshToken,
@@ -75,6 +80,22 @@ export class MezonOAuthStrategy extends PassportStrategy(
           },
         );
       console.log(response.data);
+
+      // {
+      //   aud: [ '2048697583102070784' ],
+      //   auth_time: 1776944601,
+      //   avatar: 'https://profile.mezon.ai/2038885936216936448/2038886435850817536.jpg',
+      //   display_name: 'MCS01_hieu.vovan',
+      //   email: 'vobahoaan@gmail.com',
+      //   iat: 1777284289,
+      //   iss: 'https://oauth2.mezon.ai',
+      //   mezon_id: 'AT6XVXR4sDDwiVWxrziw7LR22hZ3sFHoZVQDJJKHqK9L',
+      //   rat: 1777284289,
+      //   sub: 'AT6XVXR4sDDwiVWxrziw7LR22hZ3sFHoZVQDJJKHqK9L',
+      //   user_id: '2038885936216936448',
+      //   username: 'vobahoaan'
+      // }
+
       return response.data;
     } catch (error) {
       this.logger.error(

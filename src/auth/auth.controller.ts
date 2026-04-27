@@ -30,12 +30,12 @@ export class AuthController {
     private readonly authService: AuthService,
   ) {}
 
-  @Post('signup')
+  @Post('register')
   signup(@Body() dto: SignUpDto) {
     return this.authService.signup(dto);
   }
 
-  @Post('signin')
+  @Post('login')
   signin(@Body() dto: SignInDto) {
     return this.authService.signin(dto);
   }
