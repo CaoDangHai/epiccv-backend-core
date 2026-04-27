@@ -1,16 +1,46 @@
 import {
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
-// import {User, Bookmark} from '@prisma/client'
-import { PrismaService } from 'src/prisma/prisma.service';
-import { SignInDto, SignUpDto } from './dto';
 import * as argon from 'argon2';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { PrismaService } from '../prisma/prisma.service';
+import { SignInDto, SignUpDto } from './dto';
+
+interface CandidateResponse {
+  address?: string;
+  age?: number;
+  createdAt: Date;
+  email: string;
+  fullName: string;
+  id: string;
+  phoneNumber?: string;
+}
+
+interface SignupResponse {
+  candidate: CandidateResponse;
+  token: string;
+}
+
+export interface OAuthProfile {
+  accessToken: string;
+  email: string;
+  fullName: string;
+  id: string;
+  mezonId: string;
+  refreshToken: string;
+}
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(
+    AuthService.name,
+  );
+
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
@@ -117,6 +147,61 @@ export class AuthService {
         createdAt: candidate.createdAt,
       },
     };
+  }
+
+  async handleMezonOAuth(
+    profile: OAuthProfile,
+  ): Promise<SignupResponse> {
+    try {
+      let candidate =
+        await this.prisma.candidate.findUnique({
+          where: { email: profile.email },
+        });
+
+      if (!candidate) {
+        candidate =
+          await this.prisma.candidate.create({
+            data: {
+              address: '',
+              age: 0,
+              email: profile.email,
+              fullName:
+                profile.fullName || profile.email,
+              hash: '',
+              mezonId: profile.id,
+              phoneNumber: '',
+            },
+          });
+      }
+
+      return {
+        candidate: {
+          address: candidate.address || undefined,
+          age: candidate.age || undefined,
+          createdAt: candidate.createdAt,
+          email: candidate.email,
+          fullName:
+            candidate.fullName || 'No name',
+          id: candidate.id,
+          phoneNumber:
+            candidate.phoneNumber || undefined,
+        },
+        token: await this.signToken(
+          candidate.id,
+          candidate.email,
+        ),
+      };
+    } catch (error) {
+      this.logger.error(
+        `OAuth error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error instanceof Error
+          ? error.stack
+          : undefined,
+      );
+      throw new InternalServerErrorException(
+        'OAuth processing failed',
+      );
+    }
   }
 
   async signToken(

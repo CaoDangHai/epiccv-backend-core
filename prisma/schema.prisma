@@ -58,7 +58,10 @@ model Candidate {
   age         Int?
   socialLinks Json?    @map("social_links") // LinkedIn, Github...
   createdAt   DateTime @default(now()) @map("created_at")
+
+  mezonId       String?   @unique
   hash  String
+  
 
   cvs CurriculumVitae[]
 
