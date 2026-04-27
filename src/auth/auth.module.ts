@@ -3,17 +3,14 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './strategy/jwt.strategy';
-import { MezonOAuthStrategy } from './strategy/mezon-oauth.strategy'; // ← THÊM
-import { MezonOAuthGuard } from './guard/mezon-oauth.guard'; // ← THÊM
+import { HttpModule } from '@nestjs/axios'; 
 
 @Module({
-  imports: [JwtModule.register({})],
+  imports: [JwtModule.register({}), HttpModule],
   controllers: [AuthController],
   providers: [
     AuthService,
-    JwtStrategy,
-    MezonOAuthGuard,
-    MezonOAuthStrategy,
+    JwtStrategy
   ],
 })
 export class AuthModule {}

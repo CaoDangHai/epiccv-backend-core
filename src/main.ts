@@ -6,6 +6,8 @@ import session from 'express-session';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  app.setGlobalPrefix('api');
+
   app.use(
     session({
       secret:
@@ -21,7 +23,13 @@ async function bootstrap() {
     }),
   );
 
-  await app.listen(3333);
+
+  app.enableCors({
+    origin: 'http://localhost:5173', // Chỉ định cổng của React Vite
+    credentials: true,
+  });
+
+  await app.listen(3000);
 }
 
 bootstrap();
