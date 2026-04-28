@@ -12,32 +12,9 @@ import { Repository } from 'typeorm';
 import { firstValueFrom } from 'rxjs';
 import { Candidate } from '@entities/candidate.entity';
 import * as bcrypt from 'bcrypt';
-import { AxiosError } from 'axios'; // Bổ sung import AxiosError để bắt lỗi an toàn
+import { AxiosError } from 'axios';
 
-// ==========================================
-// ĐỊNH NGHĨA CÁC KIỂU DỮ LIỆU (INTERFACE) ĐỂ TRÁNH DÙNG 'any'
-// ==========================================
-interface RegisterDto {
-  email: string;
-  password: string; // Bắt buộc phải có để bcrypt không báo lỗi
-  fullName?: string;
-}
-
-interface LoginDto {
-  email: string;
-  password: string; // Bắt buộc phải có
-}
-
-interface MezonUserInfoDto {
-  mezon_id?: string;
-  sub?: string;
-  email?: string;
-  display_name?: string;
-  username?: string;
-  name?: string;
-  avatar?: string;
-  picture?: string;
-}
+import { LoginDto, AuthResponseDto, MezonUserInfoDto, RegisterDto } from './dto';
 
 @Injectable()
 export class AuthService {
@@ -50,10 +27,9 @@ export class AuthService {
   ) {}
 
   // ==========================================
-  // 1. XỬ LÝ ĐĂNG KÝ LOCAL (EMAIL & MẬT KHẨU)
+  // 1. XỬ LÝ ĐĂNG KÝ LOCAL
   // ==========================================
-  async registerLocal(data: RegisterDto): Promise<{ message: string }> {
-    // Bước 1: Kiểm tra xem Email đã tồn tại chưa
+  async registerLocal(data: RegisterDto): Promise<AuthResponseDto> {
     const existingUser = await this.candidateRepository.findOne({
       where: { email: data.email },
     });
@@ -62,10 +38,8 @@ export class AuthService {
       throw new ConflictException('EMAIL_ALREADY_EXISTS');
     }
 
-    // Bước 2: Mã hóa mật khẩu (data.password đã được đảm bảo là string)
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    // Bước 3: Tạo user mới
     const candidate = this.candidateRepository.create({
       email: data.email,
       fullName: data.fullName || 'Người dùng EpicCV',
@@ -74,15 +48,34 @@ export class AuthService {
       isVerified: false,
     });
 
-    await this.candidateRepository.save(candidate);
+    const savedCandidate = await this.candidateRepository.save(candidate);
 
-    return { message: 'Đăng ký thành công' };
+    // ✅ Tạo token
+    const payload = {
+      sub: savedCandidate.id,
+      email: savedCandidate.email,
+      mezonId: savedCandidate.mezonId,
+    };
+    const accessToken = this.jwtService.sign(payload);
+
+    // ✅ Gửi về user info + token
+    return {
+      accessToken: accessToken,
+      user: {
+        id: savedCandidate.id,
+        email: savedCandidate.email,
+        fullName: savedCandidate.fullName,
+        avatarUrl: savedCandidate.avatarUrl || null,
+        provider: savedCandidate.provider,
+        isVerified: savedCandidate.isVerified,
+      },
+    };
   }
 
   // ==========================================
   // 1.5 XỬ LÝ ĐĂNG NHẬP LOCAL
   // ==========================================
-  async loginLocal(data: LoginDto): Promise<{ accessToken: string }> {
+  async loginLocal(data: LoginDto): Promise<AuthResponseDto> {
     const candidate = await this.candidateRepository
       .createQueryBuilder('candidate')
       .where('candidate.email = :email', { email: data.email })
@@ -108,7 +101,18 @@ export class AuthService {
     };
     const accessToken = this.jwtService.sign(payload);
 
-    return { accessToken };
+    // ✅ Gửi về user info + token
+    return {
+      accessToken: accessToken,
+      user: {
+        id: candidate.id,
+        email: candidate.email,
+        fullName: candidate.fullName,
+        avatarUrl: candidate.avatarUrl || null,
+        provider: candidate.provider,
+        isVerified: candidate.isVerified,
+      },
+    };
   }
 
   // ==========================================
@@ -117,7 +121,7 @@ export class AuthService {
   async loginWithMezon(
     code: string,
     state: string,
-  ): Promise<{ accessToken: string }> {
+  ): Promise<AuthResponseDto> {
     const mezonToken = await this.exchangeCodeForToken(code, state);
     const userInfo = await this.getMezonUserInfo(mezonToken);
     const candidate = await this.validateAndSaveUser(userInfo);
@@ -129,7 +133,18 @@ export class AuthService {
     };
     const accessToken = this.jwtService.sign(payload);
 
-    return { accessToken };
+    // ✅ Gửi về user info + token
+    return {
+      accessToken: accessToken,
+      user: {
+        id: candidate.id,
+        email: candidate.email,
+        fullName: candidate.fullName,
+        avatarUrl: candidate.avatarUrl || null,
+        provider: candidate.provider,
+        isVerified: candidate.isVerified,
+      },
+    };
   }
 
   private async exchangeCodeForToken(
@@ -161,15 +176,13 @@ export class AuthService {
       );
       return response.data.access_token;
     } catch (e: unknown) {
-      // SỬA: Ép kiểu an toàn về AxiosError để tránh lỗi Unsafe member access
       const axiosError = e as AxiosError;
-      console.error(
-        'Mezon Token Exchange Error:',
-        axiosError.response?.data || axiosError.message,
-      );
-      throw new UnauthorizedException(
-        'Mã xác thực từ Mezon không hợp lệ hoặc đã hết hạn',
-      );
+      console.error('=== MEZON ERROR ===');
+      console.error('Status:', axiosError.response?.status);
+      console.error('Data:', JSON.stringify(axiosError.response?.data));
+      console.error('redirect_uri:', redirectUri);
+      console.error('code:', code);
+      throw new UnauthorizedException('Mã xác thực từ Mezon không hợp lệ hoặc đã hết hạn');
     }
   }
 
@@ -184,7 +197,6 @@ export class AuthService {
       );
       return response.data as MezonUserInfoDto;
     } catch {
-      // SỬA: Bỏ biến 'e' vì không dùng đến, tránh lỗi "defined but never used"
       throw new InternalServerErrorException(
         'Không thể lấy thông tin người dùng từ Mezon',
       );
@@ -194,8 +206,6 @@ export class AuthService {
   private async validateAndSaveUser(
     userInfo: MezonUserInfoDto,
   ): Promise<Candidate> {
-    console.log(userInfo);
-    // 1. Ép kiểu rõ ràng về chuỗi (string) để ESLint không vặn vẹo
     const mezonId: string = String(userInfo.mezon_id || userInfo.sub || '');
     const email: string | null = userInfo.email ? String(userInfo.email) : null;
     const fullName: string = String(
@@ -206,26 +216,22 @@ export class AuthService {
     );
     const avatarUrl: string = String(userInfo.avatar || userInfo.picture || '');
 
-    // 2. Định nghĩa rõ candidate là kiểu Candidate hoặc null
     let candidate: Candidate | null = await this.candidateRepository.findOne({
       where: { mezonId },
     });
 
     if (!candidate) {
       if (email) {
-        // Khai báo rõ kiểu Candidate | null cho emailExist
         const emailExist: Candidate | null =
           await this.candidateRepository.findOne({ where: { email } });
 
         if (emailExist) {
-          // Lúc này ESLint đã biết chắc chắn emailExist là một Candidate
           emailExist.mezonId = mezonId;
           emailExist.avatarUrl = avatarUrl;
           return await this.candidateRepository.save(emailExist);
         }
       }
 
-      // Tạo mới user
       candidate = this.candidateRepository.create({
         mezonId,
         email,
@@ -236,7 +242,6 @@ export class AuthService {
       });
       return await this.candidateRepository.save(candidate);
     } else {
-      // Cập nhật user cũ
       candidate.email = email || candidate.email;
       candidate.fullName = fullName || candidate.fullName;
       candidate.avatarUrl = avatarUrl || candidate.avatarUrl;

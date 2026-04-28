@@ -17,6 +17,7 @@ import { AnalysisResult } from './database/entities/analysis-result.entity';
 import { Roadmap } from './database/entities/roadmap.entity';
 import { RoadmapStep } from './database/entities/roadmap-step.entity';
 import { RoadmapResource } from './database/entities/roadmap-resource.entity';
+import { JdModule } from './jd/jd.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { RoadmapResource } from './database/entities/roadmap-resource.entity';
     ]),
     AuthModule,
     CvModule,
+    JdModule,
   ],
   controllers: [AppController],
   providers: [AppService],

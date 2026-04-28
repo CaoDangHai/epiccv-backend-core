@@ -4,46 +4,42 @@ import {
   Get,
   Param,
   UseInterceptors,
-  UploadedFiles,
-  Body,
+  UploadedFile,
   BadRequestException,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
-import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CvService } from './cv.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import 'multer';
 
 @Controller('cv')
 export class CvController {
   constructor(private readonly cvService: CvService) {}
 
   @Post('process')
-  @UseInterceptors(
-    FileFieldsInterceptor([
-      { name: 'file', maxCount: 1 },
-      { name: 'jd_file', maxCount: 1 },
-    ]),
-  )
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file'))
   async processCV(
-    @UploadedFiles()
-    files: { file?: Express.Multer.File[]; jd_file?: Express.Multer.File[] },
-    @Body('jd_text') jdText: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: any,
   ) {
-    const cvFile = files?.file?.[0];
-    const jdFile = files?.jd_file?.[0];
-
-    if (!cvFile) {
-      throw new BadRequestException('Bắt buộc phải tải lên file CV');
-    }
-
-    return this.cvService.processAndSaveReport(cvFile, jdFile, jdText);
+    if (!file) throw new BadRequestException('Bắt buộc phải tải lên file CV');
+    const candidateId: string = req.user.sub;
+    return this.cvService.processCVFile(file, candidateId);
   }
 
   @Get('history')
-  async getAnalysisHistory() {
-    return this.cvService.getHistory(); // Gọi hàm thật
+  @UseGuards(JwtAuthGuard)
+  async getHistory(@Req() req: any) {
+    const candidateId: string = req.user.sub;
+    return this.cvService.getHistory(candidateId);
   }
 
   @Get('analysis/:id')
+  @UseGuards(JwtAuthGuard)
   async getAnalysisById(@Param('id') id: string) {
-    return this.cvService.getAnalysisById(id); // Gọi hàm thật
+    return this.cvService.getAnalysisById(id);
   }
 }

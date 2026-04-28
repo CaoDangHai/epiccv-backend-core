@@ -1,0 +1,41 @@
+import {
+  Controller,
+  Post,
+  Get,
+  Param,
+  Body,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { JdService } from './jd.service';
+import { TextJdDto } from './dto/text_jd.dto';
+import 'multer';
+
+@Controller('jd')
+export class JdController {
+  constructor(private readonly jdService: JdService) {}
+
+  @Post('process')
+  @UseInterceptors(FileInterceptor('file'))
+  async processJD(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: TextJdDto,
+  ) {
+    if (!file && (!body.content || body.content.trim() === '')) {
+      throw new BadRequestException('Bắt buộc phải cung cấp file hoặc nội dung JD');
+    }
+    return this.jdService.processJD(file, body.content);
+  }
+
+  @Get('history')
+  async getHistory() {
+    return this.jdService.getHistory();
+  }
+
+  @Get(':id')
+  async getById(@Param('id') id: string) {
+    return this.jdService.getById(id);
+  }
+}

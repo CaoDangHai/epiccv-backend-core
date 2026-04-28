@@ -1,25 +1,46 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Query,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { LoginDto, RegisterDto } from './dto';
+
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
-  register(
-    @Body() body: { email: string; password?: string; fullName?: string },
-  ) {
-    // Ép kiểu (type casting) để ESLint không báo Unsafe argument
-    return this.authService.registerLocal(body as any);
+  async register(@Body() data: RegisterDto) {
+    return this.authService.registerLocal(data);
   }
 
   @Post('login')
-  login(@Body() body: { email: string; password?: string }) {
-    return this.authService.loginLocal(body as any);
+  async login(@Body() data: LoginDto) {
+    return this.authService.loginLocal(data);
   }
 
   @Post('mezon')
-  mezonLogin(@Body('code') code: string, @Body('state') state: string) {
+  async loginWithMezon(
+    @Body('code') code: string,
+    @Body('state') state: string,
+  ) {
     return this.authService.loginWithMezon(code, state);
+  }
+
+  // ✅ Endpoint lấy thông tin user hiện tại từ token
+  @Get('me')
+  async getCurrentUser(@Req() req: any) {
+    const user = req.user; // Từ JWT payload
+    return {
+      id: user.id,
+      email: user.email,
+      // Hoặc lấy từ DB để đầy đủ thông tin
+    };
   }
 }
