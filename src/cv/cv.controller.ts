@@ -4,15 +4,25 @@ import {
   Get,
   Param,
   UseInterceptors,
-  UploadedFile,
+  UploadedFiles,
+  Body,
   BadRequestException,
   UseGuards,
   Req,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { CvService } from './cv.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import 'multer';
+
+// Khai báo kiểu dữ liệu cho Request sau khi đi qua JwtAuthGuard (Fix lỗi ESLint)
+interface RequestWithUser extends Request {
+  user: {
+    sub: string;
+    email: string;
+    mezonId: string;
+  };
+}
 
 @Controller('cv')
 export class CvController {
@@ -20,26 +30,42 @@ export class CvController {
 
   @Post('process')
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'file', maxCount: 1 },
+      { name: 'jd_file', maxCount: 1 },
+    ]),
+  )
   async processCV(
-    @UploadedFile() file: Express.Multer.File,
-    @Req() req: any,
+    @UploadedFiles()
+    files: {
+      file?: Express.Multer.File[];
+      jd_file?: Express.Multer.File[];
+    },
+    @Body('jd_text') jdText: string,
+    @Req() req: RequestWithUser,
   ) {
-    if (!file) throw new BadRequestException('Bắt buộc phải tải lên file CV');
+    const cvFile = files?.file?.[0];
+    const jdFile = files?.jd_file?.[0];
+
+    if (!cvFile) throw new BadRequestException('Bắt buộc phải tải lên file CV');
+
     const candidateId: string = req.user.sub;
-    return this.cvService.processCVFile(file, candidateId);
+
+    return this.cvService.processCVFile(cvFile, candidateId, jdFile, jdText);
   }
 
-  @Get('history')
+  @Get('reports')
   @UseGuards(JwtAuthGuard)
-  async getHistory(@Req() req: any) {
+  async getReports(@Req() req: RequestWithUser) {
     const candidateId: string = req.user.sub;
-    return this.cvService.getHistory(candidateId);
+    return this.cvService.getReports(candidateId);
   }
 
   @Get('analysis/:id')
   @UseGuards(JwtAuthGuard)
-  async getAnalysisById(@Param('id') id: string) {
-    return this.cvService.getAnalysisById(id);
+  async getAnalysisById(@Param('id') id: string, @Req() req: RequestWithUser) {
+    const candidateId: string = req.user.sub;
+    return this.cvService.getAnalysisById(id, candidateId);
   }
 }

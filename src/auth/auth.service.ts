@@ -14,7 +14,12 @@ import { Candidate } from '@entities/candidate.entity';
 import * as bcrypt from 'bcrypt';
 import { AxiosError } from 'axios';
 
-import { LoginDto, AuthResponseDto, MezonUserInfoDto, RegisterDto } from './dto';
+import {
+  LoginDto,
+  AuthResponseDto,
+  MezonUserInfoDto,
+  RegisterDto,
+} from './dto';
 
 @Injectable()
 export class AuthService {
@@ -118,10 +123,7 @@ export class AuthService {
   // ==========================================
   // 2. XỬ LÝ OAUTH2 MEZON
   // ==========================================
-  async loginWithMezon(
-    code: string,
-    state: string,
-  ): Promise<AuthResponseDto> {
+  async loginWithMezon(code: string, state: string): Promise<AuthResponseDto> {
     const mezonToken = await this.exchangeCodeForToken(code, state);
     const userInfo = await this.getMezonUserInfo(mezonToken);
     const candidate = await this.validateAndSaveUser(userInfo);
@@ -182,7 +184,9 @@ export class AuthService {
       console.error('Data:', JSON.stringify(axiosError.response?.data));
       console.error('redirect_uri:', redirectUri);
       console.error('code:', code);
-      throw new UnauthorizedException('Mã xác thực từ Mezon không hợp lệ hoặc đã hết hạn');
+      throw new UnauthorizedException(
+        'Mã xác thực từ Mezon không hợp lệ hoặc đã hết hạn',
+      );
     }
   }
 
@@ -220,18 +224,18 @@ export class AuthService {
       where: { mezonId },
     });
 
+    // TRƯỜNG HỢP 1: CHƯA CÓ MEZON ID NÀY TRONG HỆ THỐNG
     if (!candidate) {
       if (email) {
         const emailExist: Candidate | null =
           await this.candidateRepository.findOne({ where: { email } });
-
         if (emailExist) {
+          // Đã có account Local dùng email này -> Link MezonId vào account Local
           emailExist.mezonId = mezonId;
           emailExist.avatarUrl = avatarUrl;
           return await this.candidateRepository.save(emailExist);
         }
       }
-
       candidate = this.candidateRepository.create({
         mezonId,
         email,
@@ -242,7 +246,18 @@ export class AuthService {
       });
       return await this.candidateRepository.save(candidate);
     } else {
-      candidate.email = email || candidate.email;
+      // TRƯỜNG HỢP 2: ĐÃ CÓ ACCOUNT MEZON NÀY
+      // KHÔI PHỤC BẢN FIX: Chỉ cập nhật email NẾU email đó CHƯA BỊ AI KHÁC CHIẾM DỤNG
+      if (email && email !== candidate.email) {
+        const emailExist = await this.candidateRepository.findOne({
+          where: { email },
+        });
+        if (!emailExist) {
+          candidate.email = email; // An toàn thì mới gán
+        }
+        // Nếu emailExist đã có -> Bỏ qua, giữ nguyên email cũ để tránh lỗi Unique Constraint 500
+      }
+
       candidate.fullName = fullName || candidate.fullName;
       candidate.avatarUrl = avatarUrl || candidate.avatarUrl;
       return await this.candidateRepository.save(candidate);
