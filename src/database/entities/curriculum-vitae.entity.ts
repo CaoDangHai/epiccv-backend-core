@@ -8,7 +8,6 @@ import {
   OneToMany,
 } from 'typeorm';
 import { Candidate } from './candidate.entity';
-import { CvSkill } from './cv-skill.entity';
 import { AnalysisResult } from './analysis-result.entity';
 
 @Entity('curriculum_vitaes')
@@ -63,8 +62,6 @@ export class CurriculumVitae {
   @JoinColumn({ name: 'candidate_id' })
   candidate!: Candidate;
 
-  @OneToMany(() => CvSkill, (cvSkill) => cvSkill.cv)
-  cvSkills!: CvSkill[];
 
   @OneToMany(() => AnalysisResult, (ar) => ar.cv)
   analysisResults!: AnalysisResult[];
