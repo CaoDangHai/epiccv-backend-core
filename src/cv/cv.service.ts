@@ -20,6 +20,13 @@ import {
   CompareResponse,
 } from './dto/ai-responses.dto';
 
+
+import { Roadmap } from '../database/entities/roadmap.entity';
+import { RoadmapStep } from '../database/entities/roadmap-step.entity';
+import { RoadmapResource } from '../database/entities/roadmap-resource.entity';
+
+
+
 interface AiErrorResponse {
   response?: {
     data?: unknown;
@@ -42,6 +49,16 @@ export class CvService {
 
     @InjectRepository(AnalysisResult)
     private analysisRepo: Repository<AnalysisResult>,
+
+    @InjectRepository(Roadmap)
+    private roadmapRepo: Repository<Roadmap>,
+
+    @InjectRepository(RoadmapStep)
+    private roadmapStepRepo: Repository<RoadmapStep>,
+
+    @InjectRepository(RoadmapResource)
+    private roadmapResourceRepo: Repository<RoadmapResource>,
+
   ) {
     this.aiServerUrl = process.env.AI_SERVER_URL || 'http://localhost:8000';
   }
@@ -452,6 +469,9 @@ export class CvService {
         cultureFitAnalysis: compareResult.culture_fit as any,
         matchedSkillsSummary: compareResult.matched_skills as any[],
         missingSkillsSummary: compareResult.missing_skills as any[],
+        parsedData: {
+          extractedData: compareResult,
+        },
       };
 
       const report = this.analysisRepo.create(analysisInput);
@@ -572,4 +592,146 @@ export class CvService {
       created_at: r.createdAt,
     };
   }
+
+  async generateRoadmap(analysisId: string, candidateId: string) {
+    // 1. Lấy analysis result + relations
+    console.log("DANG GENERATE ROADMAP");
+    const analysis = await this.analysisRepo.findOne({
+      where: { id: analysisId, cv: { candidateId } },
+    });
+
+    if (!analysis) {
+      throw new NotFoundException('Analysis không tồn tại hoặc không có quyền truy cập');
+    }
+
+    // 2. Sanitize (reuse existing methods)
+    const compareResult = (analysis.parsedData as any)?.extractedData;
+    if (!compareResult) {
+      throw new BadRequestException('Dữ liệu phân tích không khả dụng để generate roadmap');
+    }
+    // 3. Gọi AI
+    let roadmapResult: any;
+    try {
+      const response = await axios.post(
+        `${this.aiServerUrl}/ai/generate-roadmap`,
+        compareResult,  // ✅ Gửi nguyên object compareResult, không wrap {cv_data, jd_data}
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+      roadmapResult = response.data;
+      console.log('✅ Generate roadmap thành công:', {
+        targetJob: roadmapResult.target_job_title,
+        stepsCount: roadmapResult.steps?.length,
+      });
+    } catch (error) {
+      console.error('❌ Lỗi generate roadmap:', error);
+      
+      // ✅ Log chi tiết lỗi 422 nếu có
+      if (axios.isAxiosError(error) && error.response?.status === 422) {
+        console.error('🔍 Validation errors from AI:', error.response.data);
+      }
+      
+      throw this.handleError(error, 'Không thể generate roadmap từ AI');
+    }
+
+    // 4. Lưu vào DB
+    try {
+      // Xóa roadmap cũ nếu đã có (regenerate)
+      await this.roadmapRepo.delete({ analysisResultId: analysisId });
+
+      const roadmap = this.roadmapRepo.create({
+        analysisResultId: analysisId,
+        targetJobTitle: roadmapResult.target_job_title,
+        summary: roadmapResult.summary,
+        difficulty: roadmapResult.difficulty || 'Intermediate',
+        estimatedTotalTime: roadmapResult.estimated_total_time,
+        finalOutcomes: roadmapResult.final_outcomes || [],
+        mentorAdvice: roadmapResult.mentor_advice,
+      });
+      const savedRoadmap = await this.roadmapRepo.save(roadmap);
+
+      // Lưu steps + resources
+      const savedSteps = await Promise.all(
+        (roadmapResult.steps || []).map(async (step: any) => {
+          const savedStep = await this.roadmapStepRepo.save(
+            this.roadmapStepRepo.create({
+              roadmapId: savedRoadmap.id,
+              orderIndex: step.order,
+              title: step.title,
+              description: step.description,
+              uiColor: step.ui_color || 'primary',
+              estimatedDuration: step.estimated_duration,
+              keyTopics: step.key_topics || [],
+              linkedSkillGaps: step.linked_skill_gaps || [],
+              isCompleted: false,
+            }),
+          );
+
+          if (step.resources?.length) {
+            await Promise.all(
+              step.resources.map((res: any) =>
+                this.roadmapResourceRepo.save(
+                  this.roadmapResourceRepo.create({
+                    roadmapStepId: savedStep.id,
+                    title: res.title,
+                    url: String(res.url),
+                    resourceType: res.resource_type || 'Documentation',
+                    duration: res.duration,
+                    description: res.description,
+                  }),
+                ),
+              ),
+            );
+          }
+          return savedStep;
+        }),
+      );
+
+      console.log('💾 Đã lưu roadmap với', savedSteps.length, 'steps');
+    } catch (error) {
+      // Không throw — lưu DB thất bại không ảnh hưởng response
+      console.error('⚠️ Lưu roadmap vào DB thất bại (non-critical):', error);
+    }
+
+    // 5. Trả về response cho FE (map sang format FE expect)
+    return {
+      target_job_title: roadmapResult.target_job_title,
+      summary: roadmapResult.summary,
+      difficulty: roadmapResult.difficulty || 'Intermediate',
+      estimated_total_time: roadmapResult.estimated_total_time,
+      mentor_advice: roadmapResult.mentor_advice || null,
+      final_outcomes: roadmapResult.final_outcomes || [],
+      steps: (roadmapResult.steps || []).map((step: any) => ({
+        order: step.order,
+        title: step.title,
+        description: step.description,
+        estimated_duration: step.estimated_duration,
+        key_topics: step.key_topics || [],
+        linked_skill_gaps: step.linked_skill_gaps || [],
+        focus_skills: step.focus_skills || [],
+        ui_color: step.ui_color || 'primary',
+        is_completed: false,
+        resources: (step.resources || []).map((res: any) => ({
+          title: res.title,
+          url: String(res.url),
+          resource_type: res.resource_type || 'Documentation',
+          duration: res.duration || null,
+          description: res.description || null,
+        })),
+      })),
+    };
+  }
+
+
 }
+
+
+
+
+
+
+
+
+
+
+
+

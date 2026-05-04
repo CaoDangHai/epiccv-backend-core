@@ -68,4 +68,14 @@ export class CvController {
     const candidateId: string = req.user.sub;
     return this.cvService.getAnalysisById(id, candidateId);
   }
+
+  @Post('roadmap/:analysisId')
+  @UseGuards(JwtAuthGuard) 
+  async generateRoadmap(
+    @Param('analysisId') analysisId: string,
+    @Req() req: any,
+  ) {
+    const candidateId = req.user?.id || req.user?.sub;
+    return this.cvService.generateRoadmap(analysisId, candidateId);
+  }
 }
