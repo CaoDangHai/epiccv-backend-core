@@ -73,6 +73,12 @@ export class JobDescription {
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt!: Date;
 
+
+  constructor(partial: Partial<JobDescription> = {}) {
+    Object.assign(this, partial);
+  }
+
+
   // ================= RELATIONS =================
   @OneToMany(() => AnalysisResult, (ar) => ar.jd)
   analysisResults!: AnalysisResult[];

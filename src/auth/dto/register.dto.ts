@@ -5,4 +5,8 @@ export class RegisterDto extends LoginDto{
   @IsString()
   @IsOptional() // Tương ứng với dấu ? của bạn
   fullName?: string;
+
+  @IsString()
+  @IsOptional()
+  turnstileToken?: string;
 }
