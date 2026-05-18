@@ -7,15 +7,18 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JdService } from './jd.service';
 import { TextJdDto } from './dto/text_jd.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import 'multer';
 
 @Controller('jd')
+@UseGuards(JwtAuthGuard)
 export class JdController {
-  constructor(private readonly jdService: JdService) {}
+  constructor(private readonly jdService: JdService) { }
 
   @Post('process')
   @UseInterceptors(FileInterceptor('file'))

@@ -21,11 +21,9 @@ import {
 } from './dto/ai-responses.dto';
 
 
-import { Roadmap } from '../database/entities/roadmap.entity';
-import { RoadmapStep } from '../database/entities/roadmap-step.entity';
-import { RoadmapResource } from '../database/entities/roadmap-resource.entity';
 
-
+import * as fs from 'fs';
+import * as path from 'path';
 
 interface AiErrorResponse {
   response?: {
@@ -49,15 +47,6 @@ export class CvService {
 
     @InjectRepository(AnalysisResult)
     private analysisRepo: Repository<AnalysisResult>,
-
-    @InjectRepository(Roadmap)
-    private roadmapRepo: Repository<Roadmap>,
-
-    @InjectRepository(RoadmapStep)
-    private roadmapStepRepo: Repository<RoadmapStep>,
-
-    @InjectRepository(RoadmapResource)
-    private roadmapResourceRepo: Repository<RoadmapResource>,
 
   ) {
     this.aiServerUrl = process.env.AI_SERVER_URL || 'http://localhost:8000';
@@ -116,11 +105,11 @@ export class CvService {
     let cvData: CVExtractionResponse;
     try {
       const formData = new FormData();
-      
+
       // ✅ Gửi text đã extract dưới dạng file .txt UTF-8
       formData.append('file', Buffer.from(rawText, 'utf-8'), {
-        filename: 'cv_extracted.txt',  
-        contentType: 'text/plain; charset=utf-8',  
+        filename: 'cv_extracted.txt',
+        contentType: 'text/plain; charset=utf-8',
       });
 
       const response = await axios.post<CVExtractionResponse>(
@@ -146,34 +135,50 @@ export class CvService {
       throw this.handleError(error, 'Không thể trích xuất thông tin từ CV');
     }
 
-  // Step 1.3: Lưu vào database (giữ nguyên)
-  try {
-    const cvInput: DeepPartial<CurriculumVitae> = {
-      candidateId,
-      summary: cvData.summary || undefined,
-      totalExpYears: cvData.total_experience_years || 0,
-      workHistory: cvData.work_history as any[],
-      education: cvData.education as any[],
-      projects: cvData.projects as any[],
-      certifications: cvData.certifications as any[],
-      languages: cvData.languages as any[],
-      topStrengths: cvData.top_strengths || undefined,
-      parsedData: {
-        fileName: file.originalname || 'CV_Uploaded',
-        fileType: file.mimetype || 'application/pdf',
-        extractedData: cvData,
-      },
-    };
+    // Step 1.3: Lưu vào database (giữ nguyên)
+    // Step 1.3: Lưu file vật lý và lưu vào database
+    let cvFileUrl: string | null = null;
+    if (file && file.buffer) {
+      const uploadDir = path.join(process.cwd(), 'uploads');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const ext = path.extname(file.originalname || '.pdf') || '.pdf';
+      const savedFileName = `cv-${uniqueSuffix}${ext}`;
+      const filePath = path.join(uploadDir, savedFileName);
+      fs.writeFileSync(filePath, file.buffer);
+      cvFileUrl = `http://localhost:3000/uploads/${savedFileName}`; // URL để FE truy cập
+    }
 
-    const cv = this.cvRepo.create(cvInput);
-    const savedCv = await this.cvRepo.save(cv);
-    console.log('💾 Đã lưu CV vào database với ID:', savedCv.id);
-    return savedCv;
-  } catch (error) {
-    console.error('❌ Lỗi khi lưu CV vào database:', error);
-    throw new InternalServerErrorException('Không thể lưu CV vào database');
+    try {
+      const cvInput: DeepPartial<CurriculumVitae> = {
+        candidateId,
+        summary: cvData.summary || undefined,
+        totalExpYears: cvData.total_experience_years || 0,
+        workHistory: cvData.work_history as any[],
+        education: cvData.education as any[],
+        projects: cvData.projects as any[],
+        certifications: cvData.certifications as any[],
+        languages: cvData.languages as any[],
+        topStrengths: cvData.top_strengths || undefined,
+        parsedData: {
+          fileName: file.originalname || 'CV_Uploaded',
+          fileType: file.mimetype || 'application/pdf',
+          fileUrl: cvFileUrl, // <--- Đã thêm URL vào đây
+          extractedData: cvData,
+        },
+      };
+
+      const cv = this.cvRepo.create(cvInput);
+      const savedCv = await this.cvRepo.save(cv);
+      console.log('💾 Đã lưu CV vào database với ID:', savedCv.id);
+      return savedCv;
+    } catch (error) {
+      console.error('❌ Lỗi khi lưu CV vào database:', error);
+      throw new InternalServerErrorException('Không thể lưu CV vào database');
+    }
   }
-}
 
   /**
    * Step 2: Extract JD từ file/text và lưu vào database
@@ -185,7 +190,7 @@ export class CvService {
     console.log('📋 Bước 2: Đang trích xuất thông tin từ JD...');
 
     let rawJdText = jdText || '';
-    let fileName = 'jd_extracted.txt';  
+    let fileName = 'jd_extracted.txt';
     let mimeType = 'text/plain; charset=utf-8';
 
     // Nếu có file JD, extract text từ file
@@ -200,7 +205,7 @@ export class CvService {
     }
 
     const trimmedJdText = rawJdText?.trim();
-    if (!trimmedJdText || trimmedJdText.length < 10) { 
+    if (!trimmedJdText || trimmedJdText.length < 10) {
       console.error('❌ JD content too short:', {
         originalLength: rawJdText?.length,
         trimmedLength: trimmedJdText?.length,
@@ -212,7 +217,7 @@ export class CvService {
     let jdData: JDExtractionResponse;
     try {
       const formData = new FormData();
-      
+
       // ✅ FIX: Gửi JD dưới dạng file text (giống extract-cv)
       formData.append('file', Buffer.from(trimmedJdText, 'utf-8'), {  // ✅ Field name: 'file'
         filename: fileName,
@@ -246,13 +251,29 @@ export class CvService {
       });
     } catch (error) {
       console.error('❌ Lỗi khi gọi API extract-jd:', error);
-      
+
       // ✅ Log response data nếu có để debug
       if ((error as any).response?.data) {
         console.error('🔍 AI Response data:', (error as any).response.data);
       }
-      
+
       throw this.handleError(error, 'Không thể trích xuất thông tin từ JD');
+    }
+
+    // Lưu vào database
+    // Lưu file JD vật lý (nếu có upload file)
+    let jdFileUrl: string | null = null;
+    if (jdFile && jdFile.buffer) {
+      const uploadDir = path.join(process.cwd(), 'uploads');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const ext = path.extname(jdFile.originalname || '.pdf') || '.pdf';
+      const savedFileName = `jd-${uniqueSuffix}${ext}`;
+      const filePath = path.join(uploadDir, savedFileName);
+      fs.writeFileSync(filePath, jdFile.buffer);
+      jdFileUrl = `http://localhost:3000/uploads/${savedFileName}`;
     }
 
     // Lưu vào database
@@ -277,6 +298,7 @@ export class CvService {
         parsedData: {
           fileName,
           fileType: mimeType,
+          fileUrl: jdFileUrl, // <--- Đã thêm URL vào đây
           extractedData: jdData,
         },
       };
@@ -305,11 +327,11 @@ export class CvService {
       education: cvData.education ?? [],
       projects: cvData.projects ?? [],
       certifications: cvData.certifications ?? [],
-      awards : cvData.awards ?? [],
+      awards: cvData.awards ?? [],
       languages: cvData.languages ?? [],
-      
-      
-      
+
+
+
     };
   }
 
@@ -323,7 +345,7 @@ export class CvService {
       salary_info: jdData.salary_info ?? null,
       required_skills: jdData.required_skills ?? null,
       soft_skills: jdData.soft_skills ?? null,
-      
+
       min_total_experience_years: jdData.min_total_experience_years ?? null,
       preferred_seniority: jdData.preferred_seniority ?? null,
       education_requirements: jdData.education_requirements ?? null,
@@ -332,11 +354,11 @@ export class CvService {
       responsibilities: jdData.responsibilities ?? null,
       requirements_summary: jdData.requirements_summary ?? null,
       benefits: jdData.benefits ?? null,
-      
+
       industry_tags: jdData.industry_tags ?? null,
       tool_stack: jdData.tool_stack ?? null,
 
-      
+
     };
   }
 
@@ -373,9 +395,9 @@ export class CvService {
     let compareResult: CompareResponse;
     try {
       const payload = {
-      cv_data: this.sanitizeCvForCompare(cvData),
-      jd_data: this.sanitizeJdForCompare(jdData),
-    };
+        cv_data: this.sanitizeCvForCompare(cvData),
+        jd_data: this.sanitizeJdForCompare(jdData),
+      };
 
 
       const response = await axios.post<CompareResponse>(
@@ -394,22 +416,22 @@ export class CvService {
       }
 
       compareResult = response.data;
-      
+
       // ✅ Validate response structure
       if (compareResult.is_qualified === undefined) {
         console.warn('⚠️ Compare response missing is_qualified field:', compareResult);
       }
-      
+
       console.log('✅ So sánh thành công:', {
         isQualified: compareResult.is_qualified,
         matchPercentage: compareResult.match_percentage || compareResult.score,
         matchedSkillsCount: compareResult.matched_skills?.length || 0,
         missingSkillsCount: compareResult.missing_skills?.length || 0,
       });
-      
+
     } catch (error: unknown) {
       console.error('❌ Lỗi khi gọi API compare:', error);
-      
+
       // ✅ Enhanced error inspection
       if (axios.isAxiosError(error)) {
         console.error('🔍 AxiosError details:', {
@@ -424,7 +446,7 @@ export class CvService {
             headers: error.config?.headers,
           },
         });
-        
+
         // ✅ Handle specific AI errors
         if (error.response?.status === 400) {
           throw new BadRequestException(
@@ -450,7 +472,7 @@ export class CvService {
       } else {
         console.error('🔍 Unknown error type:', typeof error, error);
       }
-      
+
       throw this.handleError(error, 'Không thể so sánh CV với JD');
     }
 
@@ -490,53 +512,53 @@ export class CvService {
    * Helper: Xử lý lỗi từ AI API
    */
   private handleError(error: unknown, defaultMessage: string): Error {
-  // ✅ Nếu đã là NestJS exception, return luôn
-  if (error instanceof BadRequestException || 
+    // ✅ Nếu đã là NestJS exception, return luôn
+    if (error instanceof BadRequestException ||
       error instanceof InternalServerErrorException ||
       error instanceof NotFoundException) {
-    return error as Error;
-  }
-  
-  const err = error as AiErrorResponse;
-  
-  console.error('🔍 handleError received:', {
-    errorType: typeof error,
-    constructor: (error as any)?.constructor?.name,
-    message: err.message,
-    code: err.code,
-    status: err.response?.status,
-    data: err.response?.data,
-  });
+      return error as Error;
+    }
 
-  if (err.response) {
-    const status = err.response.status;
-    const responseData = err.response.data;
-    
-    if (status === 400) {
-      return new BadRequestException(
-        typeof responseData === 'string' 
-          ? responseData 
-          : JSON.stringify(responseData) || 'Dữ liệu không hợp lệ',
-      );
-    }
-    if (status === 422) {
-      return new BadRequestException(
-        `Validation error: ${JSON.stringify(responseData)}`,
-      );
-    }
-    if (status === 500) {
-      return new InternalServerErrorException(
-        typeof responseData === 'string'
-          ? responseData
-          : 'AI Server gặp lỗi nội bộ',
-      );
-    }
-  }
+    const err = error as AiErrorResponse;
 
-  return new InternalServerErrorException(
-    err.message || defaultMessage,
-  );
-}
+    console.error('🔍 handleError received:', {
+      errorType: typeof error,
+      constructor: (error as any)?.constructor?.name,
+      message: err.message,
+      code: err.code,
+      status: err.response?.status,
+      data: err.response?.data,
+    });
+
+    if (err.response) {
+      const status = err.response.status;
+      const responseData = err.response.data;
+
+      if (status === 400) {
+        return new BadRequestException(
+          typeof responseData === 'string'
+            ? responseData
+            : JSON.stringify(responseData) || 'Dữ liệu không hợp lệ',
+        );
+      }
+      if (status === 422) {
+        return new BadRequestException(
+          `Validation error: ${JSON.stringify(responseData)}`,
+        );
+      }
+      if (status === 500) {
+        return new InternalServerErrorException(
+          typeof responseData === 'string'
+            ? responseData
+            : 'AI Server gặp lỗi nội bộ',
+        );
+      }
+    }
+
+    return new InternalServerErrorException(
+      err.message || defaultMessage,
+    );
+  }
 
   /**
    * Get reports by candidate
@@ -548,16 +570,26 @@ export class CvService {
       order: { createdAt: 'DESC' },
     });
 
-    return results.map((r) => ({
-      id: r.id,
-      cvId: r.cvId,
-      jdId: r.jdId,
-      jobTitle: r.jd?.jobTitle,
-      match_percentage: r.matchPercentage,
-      is_qualified: r.isQualified,
-      overall: r.overallAssessment,
-      created_at: r.createdAt,
-    }));
+    return results.map((r) => {
+      const cvParsed = r.cv?.parsedData as any;
+      const cvName = cvParsed?.fileName || 'CV_Uploaded';
+
+      const jdParsed = r.jd?.parsedData as any;
+      const jdName = r.jd?.jobTitle || jdParsed?.fileName || 'Job Description';
+
+      return {
+        id: r.id,
+        cvId: r.cvId,
+        jdId: r.jdId,
+        cvName,       // Đã thêm tên CV
+        jdName,       // Đã thêm tên JD
+        jobTitle: r.jd?.jobTitle,
+        match_percentage: r.matchPercentage,
+        is_qualified: r.isQualified,
+        overall: r.overallAssessment,
+        created_at: r.createdAt,
+      };
+    });
   }
 
   /**
@@ -575,10 +607,22 @@ export class CvService {
       );
     }
 
+    const cvParsed = r.cv?.parsedData as any;
+    const cvName = cvParsed?.fileName || 'CV_Uploaded';
+    const cvUrl = cvParsed?.fileUrl || null; // <--- Lấy URL CV
+
+    const jdParsed = r.jd?.parsedData as any;
+    const jdName = r.jd?.jobTitle || jdParsed?.fileName || 'Job Description';
+    const jdUrl = jdParsed?.fileUrl || null; // <--- Lấy URL JD
+
     return {
       id: r.id,
       cvId: r.cvId,
       jdId: r.jdId,
+      cvName,
+      jdName,
+      cvUrl,  // <--- Trả về Frontend
+      jdUrl,  // <--- Trả về Frontend
       jobTitle: r.jd?.jobTitle,
       companyName: r.jd?.companyName,
       match_percentage: r.matchPercentage,
@@ -592,135 +636,6 @@ export class CvService {
       created_at: r.createdAt,
     };
   }
-
-  async generateRoadmap(analysisId: string, candidateId: string) {
-    // 1. Lấy analysis result + relations
-    console.log("DANG GENERATE ROADMAP");
-    const analysis = await this.analysisRepo.findOne({
-      where: { id: analysisId, cv: { candidateId } },
-    });
-
-    if (!analysis) {
-      throw new NotFoundException('Analysis không tồn tại hoặc không có quyền truy cập');
-    }
-
-    // 2. Sanitize (reuse existing methods)
-    const compareResult = (analysis.parsedData as any)?.extractedData;
-    if (!compareResult) {
-      throw new BadRequestException('Dữ liệu phân tích không khả dụng để generate roadmap');
-    }
-    // 3. Gọi AI
-    let roadmapResult: any;
-    try {
-      const response = await axios.post(
-        `${this.aiServerUrl}/ai/generate-roadmap`,
-        compareResult,  // ✅ Gửi nguyên object compareResult, không wrap {cv_data, jd_data}
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-      roadmapResult = response.data;
-      console.log('✅ Generate roadmap thành công:', {
-        targetJob: roadmapResult.target_job_title,
-        stepsCount: roadmapResult.steps?.length,
-      });
-    } catch (error) {
-      console.error('❌ Lỗi generate roadmap:', error);
-      
-      // ✅ Log chi tiết lỗi 422 nếu có
-      if (axios.isAxiosError(error) && error.response?.status === 422) {
-        console.error('🔍 Validation errors from AI:', error.response.data);
-      }
-      
-      throw this.handleError(error, 'Không thể generate roadmap từ AI');
-    }
-
-    // 4. Lưu vào DB
-    try {
-      // Xóa roadmap cũ nếu đã có (regenerate)
-      await this.roadmapRepo.delete({ analysisResultId: analysisId });
-
-      const roadmap = this.roadmapRepo.create({
-        analysisResultId: analysisId,
-        targetJobTitle: roadmapResult.target_job_title,
-        summary: roadmapResult.summary,
-        difficulty: roadmapResult.difficulty || 'Intermediate',
-        estimatedTotalTime: roadmapResult.estimated_total_time,
-        finalOutcomes: roadmapResult.final_outcomes || [],
-        mentorAdvice: roadmapResult.mentor_advice,
-      });
-      const savedRoadmap = await this.roadmapRepo.save(roadmap);
-
-      // Lưu steps + resources
-      const savedSteps = await Promise.all(
-        (roadmapResult.steps || []).map(async (step: any) => {
-          const savedStep = await this.roadmapStepRepo.save(
-            this.roadmapStepRepo.create({
-              roadmapId: savedRoadmap.id,
-              orderIndex: step.order,
-              title: step.title,
-              description: step.description,
-              uiColor: step.ui_color || 'primary',
-              estimatedDuration: step.estimated_duration,
-              keyTopics: step.key_topics || [],
-              linkedSkillGaps: step.linked_skill_gaps || [],
-              isCompleted: false,
-            }),
-          );
-
-          if (step.resources?.length) {
-            await Promise.all(
-              step.resources.map((res: any) =>
-                this.roadmapResourceRepo.save(
-                  this.roadmapResourceRepo.create({
-                    roadmapStepId: savedStep.id,
-                    title: res.title,
-                    url: String(res.url),
-                    resourceType: res.resource_type || 'Documentation',
-                    duration: res.duration,
-                    description: res.description,
-                  }),
-                ),
-              ),
-            );
-          }
-          return savedStep;
-        }),
-      );
-
-      console.log('💾 Đã lưu roadmap với', savedSteps.length, 'steps');
-    } catch (error) {
-      // Không throw — lưu DB thất bại không ảnh hưởng response
-      console.error('⚠️ Lưu roadmap vào DB thất bại (non-critical):', error);
-    }
-
-    // 5. Trả về response cho FE (map sang format FE expect)
-    return {
-      target_job_title: roadmapResult.target_job_title,
-      summary: roadmapResult.summary,
-      difficulty: roadmapResult.difficulty || 'Intermediate',
-      estimated_total_time: roadmapResult.estimated_total_time,
-      mentor_advice: roadmapResult.mentor_advice || null,
-      final_outcomes: roadmapResult.final_outcomes || [],
-      steps: (roadmapResult.steps || []).map((step: any) => ({
-        order: step.order,
-        title: step.title,
-        description: step.description,
-        estimated_duration: step.estimated_duration,
-        key_topics: step.key_topics || [],
-        linked_skill_gaps: step.linked_skill_gaps || [],
-        focus_skills: step.focus_skills || [],
-        ui_color: step.ui_color || 'primary',
-        is_completed: false,
-        resources: (step.resources || []).map((res: any) => ({
-          title: res.title,
-          url: String(res.url),
-          resource_type: res.resource_type || 'Documentation',
-          duration: res.duration || null,
-          description: res.description || null,
-        })),
-      })),
-    };
-  }
-
 
 }
 

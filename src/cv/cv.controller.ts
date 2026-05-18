@@ -25,8 +25,9 @@ interface RequestWithUser extends Request {
 }
 
 @Controller('cv')
+@UseGuards(JwtAuthGuard)
 export class CvController {
-  constructor(private readonly cvService: CvService) {}
+  constructor(private readonly cvService: CvService) { }
 
   @Post('process')
   @UseGuards(JwtAuthGuard)
@@ -67,15 +68,5 @@ export class CvController {
   async getAnalysisById(@Param('id') id: string, @Req() req: RequestWithUser) {
     const candidateId: string = req.user.sub;
     return this.cvService.getAnalysisById(id, candidateId);
-  }
-
-  @Post('roadmap/:analysisId')
-  @UseGuards(JwtAuthGuard) 
-  async generateRoadmap(
-    @Param('analysisId') analysisId: string,
-    @Req() req: any,
-  ) {
-    const candidateId = req.user?.id || req.user?.sub;
-    return this.cvService.generateRoadmap(analysisId, candidateId);
   }
 }

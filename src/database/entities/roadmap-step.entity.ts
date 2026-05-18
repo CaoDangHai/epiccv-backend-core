@@ -43,6 +43,9 @@ export class RoadmapStep {
   @Column({ type: 'jsonb', nullable: true, name: 'linked_skill_gaps' })
   linkedSkillGaps!: string[];
 
+  @Column({ type: 'jsonb', nullable: true, name: 'focus_skills' })
+  focusSkills!: string[];
+
   @Column({ type: 'boolean', default: false, name: 'is_completed' })
   isCompleted!: boolean;
 
