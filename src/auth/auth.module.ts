@@ -3,10 +3,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { PassportModule } from '@nestjs/passport'; // ← thêm
+import { PassportModule } from '@nestjs/passport'; 
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { JwtStrategy } from './strategies/jwt.strategy'; // ← thêm
+import { JwtStrategy } from './strategies/jwt.strategy'; 
 import { Candidate } from '@entities/candidate.entity';
 
 @Module({

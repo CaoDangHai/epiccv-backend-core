@@ -10,7 +10,8 @@ import {
   UseGuards,
   Req,
   Sse,
-  MessageEvent
+  MessageEvent,
+  Delete
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Observable } from 'rxjs';
@@ -63,5 +64,23 @@ export class CvController {
   @UseGuards(JwtAuthGuard)
   async getAnalysisById(@Param('id') id: string, @Req() req: RequestWithUser) {
     return this.cvService.getAnalysisById(id, req.user.sub);
+  }
+
+  @Get('saved')
+  @UseGuards(JwtAuthGuard)
+  async getSavedCVs(@Req() req: RequestWithUser) {
+    return this.cvService.getSavedCVs(req.user.sub);
+  }
+
+  @Delete('saved/:id')
+  @UseGuards(JwtAuthGuard)
+  async deleteCV(@Param('id') id: string, @Req() req: RequestWithUser) {
+    return this.cvService.deleteCV(id, req.user.sub);
+  }
+
+  @Delete('history')
+  @UseGuards(JwtAuthGuard)
+  async deleteAllHistory(@Req() req: RequestWithUser) {
+    return this.cvService.deleteAllHistory(req.user.sub);
   }
 }

@@ -249,4 +249,27 @@ export class CvService {
     const cvParsed = r.cv?.parsedData as any; const jdParsed = r.jd?.parsedData as any;
     return { id: r.id, cvId: r.cvId, jdId: r.jdId, cvName: cvParsed?.fileName || 'CV_Uploaded', jdName: r.jd?.jobTitle || jdParsed?.fileName || 'JD', cvUrl: cvParsed?.fileUrl || null, jdUrl: jdParsed?.fileUrl || null, jobTitle: r.jd?.jobTitle, companyName: r.jd?.companyName, match_percentage: r.matchPercentage, is_qualified: r.isQualified, overall: r.overallAssessment, experience_alignment: r.experienceAlignment, total_years_gap: r.totalYearsGap, culture_fit: r.cultureFitAnalysis, matched_skills: r.matchedSkillsSummary, missing_skills: r.missingSkillsSummary, created_at: r.createdAt };
   }
+
+  async getSavedCVs(candidateId: string) {
+    const cvs = await this.cvRepo.find({ where: { candidateId }, order: { createdAt: 'DESC' }, take: 3 });
+    return cvs.map(cv => ({
+      id: cv.id,
+      name: (cv.parsedData as any)?.fileName || 'CV_Uploaded.pdf',
+      meta: `Tải lên lúc ${new Date(cv.createdAt).toLocaleDateString('vi-VN')}`,
+      color: 'blue'
+    }));
+  }
+
+  async deleteCV(id: string, candidateId: string) {
+    const cv = await this.cvRepo.findOne({ where: { id, candidateId } });
+    if (!cv) throw new NotFoundException('CV không tồn tại');
+    await this.cvRepo.remove(cv);
+    return { success: true };
+  }
+
+  async deleteAllHistory(candidateId: string) {
+    const results = await this.analysisRepo.find({ where: { cv: { candidateId } } });
+    await this.analysisRepo.remove(results);
+    return { success: true };
+  }
 }
