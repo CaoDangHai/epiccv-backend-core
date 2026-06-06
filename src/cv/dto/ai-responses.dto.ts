@@ -1,4 +1,4 @@
-// DTOs cho CV Extraction
+// DTOs for CV extraction responses.
 export interface SocialLinks {
   linkedin?: string;
   github?: string;
@@ -66,6 +66,7 @@ export interface Project {
 }
 
 export interface CVExtractionResponse {
+  raw_text?: string;
   full_name?: string;
   email?: string;
   phone?: string;
@@ -85,7 +86,7 @@ export interface CVExtractionResponse {
   remark?: string[];
 }
 
-// DTOs cho JD Extraction
+// DTOs for job description extraction responses.
 export interface JDSalary {
   min_val?: number;
   max_val?: number;
@@ -112,6 +113,7 @@ export interface JDContext {
 }
 
 export interface JDExtractionResponse {
+  raw_text?: string;
   job_title: string;
   company_name?: string;
   job_location?: string;
@@ -129,15 +131,17 @@ export interface JDExtractionResponse {
   responsibilities?: string[];
   requirements_summary?: string[];
   benefits?: string[];
-  
+
   industry_tags?: string[];
   tool_stack?: string[];
 }
 
-// DTOs cho Compare API
+// DTOs for compare API responses.
 export interface SkillMatch {
   name: string;
   category?: string;
+  cv_level?: string;
+  jd_level?: string;
   level_cv?: string;
   level_jd_req?: string;
   years_of_experience?: number;
@@ -164,6 +168,7 @@ export interface CultureAndIndustryFit {
 }
 
 export interface OverallAssessment {
+  match_percentage?: number;
   summary?: string;
   recommendation?: string;
   strengths?: string[];

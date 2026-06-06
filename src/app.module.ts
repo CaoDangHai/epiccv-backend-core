@@ -5,8 +5,6 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CvModule } from './cv/cv.module';
-
-// Import tất cả Entity để đăng ký
 import { Candidate } from './database/entities/candidate.entity';
 import { CurriculumVitae } from './database/entities/curriculum-vitae.entity';
 import { AnalysisResult } from './database/entities/analysis-result.entity';
@@ -26,12 +24,11 @@ import { CandidateModule } from './candidate/candidate.module';
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
         url: configService.get<string>('DATABASE_URL'),
-        autoLoadEntities: true, // Tự động load entities từ forFeature
-        synchronize: true, //process.env.NODE_ENV !== 'production', // Tự động tạo bảng trên DB (Chỉ dùng lúc code)
+        autoLoadEntities: true,
+        synchronize: true,
         ssl: { rejectUnauthorized: false },
       }),
     }),
-    // Đăng ký toàn bộ Entity vào hệ thống tại đây
     TypeOrmModule.forFeature([
       Candidate,
       CurriculumVitae,

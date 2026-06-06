@@ -9,7 +9,12 @@ import { AnalysisResult } from '../database/entities/analysis-result.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Roadmap, RoadmapStep, RoadmapResource, AnalysisResult])
+    TypeOrmModule.forFeature([
+      Roadmap,
+      RoadmapStep,
+      RoadmapResource,
+      AnalysisResult,
+    ]),
   ],
   controllers: [RoadmapController],
   providers: [RoadmapService],

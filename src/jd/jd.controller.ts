@@ -18,7 +18,7 @@ import 'multer';
 @Controller('jd')
 @UseGuards(JwtAuthGuard)
 export class JdController {
-  constructor(private readonly jdService: JdService) { }
+  constructor(private readonly jdService: JdService) {}
 
   @Post('process')
   @UseInterceptors(FileInterceptor('file'))
@@ -27,7 +27,9 @@ export class JdController {
     @Body() body: TextJdDto,
   ) {
     if (!file && (!body.content || body.content.trim() === '')) {
-      throw new BadRequestException('Bắt buộc phải cung cấp file hoặc nội dung JD');
+      throw new BadRequestException(
+        'Provide a job description file or text content',
+      );
     }
     return this.jdService.processJD(file, body.content);
   }

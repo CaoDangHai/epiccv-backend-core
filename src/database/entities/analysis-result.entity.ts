@@ -58,10 +58,8 @@ export class AnalysisResult {
   @Column({ type: 'jsonb', nullable: true, name: 'missing_skills_summary' })
   missingSkillsSummary!: any[];
 
-
-  @Column({ type: 'jsonb', name: 'parsed_data' , nullable: true })
+  @Column({ type: 'jsonb', name: 'parsed_data', nullable: true })
   parsedData!: Record<string, any>;
-
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt!: Date;
@@ -71,7 +69,6 @@ export class AnalysisResult {
   })
   @JoinColumn({ name: 'cv_id' })
   cv!: CurriculumVitae;
-  
 
   @ManyToOne(() => JobDescription, (jd) => jd.analysisResults, {
     onDelete: 'CASCADE',
@@ -79,9 +76,6 @@ export class AnalysisResult {
   @JoinColumn({ name: 'jd_id' })
   jd!: JobDescription;
 
-  // Quan hệ 1-1 với Roadmap
   @OneToOne(() => Roadmap, (roadmap) => roadmap.analysisResult)
   roadmap!: Roadmap;
-
-  
 }

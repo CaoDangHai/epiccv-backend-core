@@ -1,9 +1,9 @@
-import {  IsString, IsOptional } from 'class-validator';
-import { LoginDto } from './login.dto'
+import { IsString, IsOptional } from 'class-validator';
+import { LoginDto } from './login.dto';
 
-export class RegisterDto extends LoginDto{
+export class RegisterDto extends LoginDto {
   @IsString()
-  @IsOptional() // Tương ứng với dấu ? của bạn
+  @IsOptional()
   fullName?: string;
 
   @IsString()

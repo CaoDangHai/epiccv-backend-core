@@ -5,9 +5,9 @@ import { CandidateService } from './candidate.service';
 import { Candidate } from '../database/entities/candidate.entity';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Candidate])],
-    controllers: [CandidateController],
-    providers: [CandidateService],
-    exports: [CandidateService],
+  imports: [TypeOrmModule.forFeature([Candidate])],
+  controllers: [CandidateController],
+  providers: [CandidateService],
+  exports: [CandidateService],
 })
-export class CandidateModule { }
+export class CandidateModule {}

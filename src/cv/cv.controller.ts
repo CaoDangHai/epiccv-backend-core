@@ -11,44 +11,53 @@ import {
   Req,
   Sse,
   MessageEvent,
-  Delete
+  Delete,
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import type { Request } from 'express';
 import { Observable } from 'rxjs';
 import { CvService } from './cv.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import 'multer';
 
 interface RequestWithUser extends Request {
-  user: { sub: string; email: string; mezonId: string; };
+  user: { sub: string; email: string; mezonId: string };
 }
 
-@Controller('cv') // Bỏ Guard chung ở Class
+@Controller('cv')
 export class CvController {
-  constructor(private readonly cvService: CvService) { }
+  constructor(private readonly cvService: CvService) {}
 
   @Post('process')
-  @UseGuards(JwtAuthGuard) // Chỉ cài Guard ở endpoint cần gửi file
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(
     FileFieldsInterceptor([
       { name: 'file', maxCount: 1 },
       { name: 'jd_file', maxCount: 1 },
     ]),
   )
-  async processCV(
-    @UploadedFiles() files: { file?: Express.Multer.File[]; jd_file?: Express.Multer.File[]; },
+  processCV(
+    @UploadedFiles()
+    files: { file?: Express.Multer.File[]; jd_file?: Express.Multer.File[] },
     @Body('jd_text') jdText: string,
+    @Body('saved_cv_id') savedCvId: string,
     @Req() req: RequestWithUser,
   ) {
     const cvFile = files?.file?.[0];
     const jdFile = files?.jd_file?.[0];
-    if (!cvFile) throw new BadRequestException('Bắt buộc phải tải lên file CV');
+    if (!cvFile && !savedCvId) {
+      throw new BadRequestException('Provide a CV file or select a saved CV');
+    }
 
-    // Gọi và trả về jobId lập tức
-    return this.cvService.startProcessCV(cvFile, req.user.sub, jdFile, jdText);
+    return this.cvService.startProcessCV({
+      cvFile,
+      savedCvId,
+      candidateId: req.user.sub,
+      jdFile,
+      jdText,
+    });
   }
 
-  // Luồng SSE Public cho phép Frontend kết nối lấy tiến độ thật
   @Sse('progress/:jobId')
   progress(@Param('jobId') jobId: string): Observable<MessageEvent> {
     return this.cvService.getProgressStream(jobId);

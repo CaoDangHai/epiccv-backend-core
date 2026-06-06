@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JobDescription } from '../database/entities/job-description.entity';
@@ -21,7 +25,9 @@ export class JdService {
         rawText = await extractTextFromFile(file);
       } catch (error) {
         throw new BadRequestException(
-          error instanceof Error ? error.message : 'Không thể đọc nội dung file JD',
+          error instanceof Error
+            ? error.message
+            : 'Unable to read job description file content',
         );
       }
       source = 'file';
@@ -42,8 +48,6 @@ export class JdService {
     });
 
     const saved = await this.jdRepo.save(jd);
-    console.log("=========================JD=========================");
-    console.log(rawText);
     return {
       id: saved.id,
       fileName: file?.originalname || null,
@@ -56,16 +60,16 @@ export class JdService {
 
   async getHistory() {
     const results = await this.jdRepo.find({ order: { createdAt: 'DESC' } });
-    return results.map((r) => ({
-      id: r.id,
-      jobTitle: r.jobTitle,
-      created_at: r.createdAt,
+    return results.map((result) => ({
+      id: result.id,
+      jobTitle: result.jobTitle,
+      created_at: result.createdAt,
     }));
   }
 
   async getById(id: string) {
     const jd = await this.jdRepo.findOne({ where: { id } });
-    if (!jd) throw new NotFoundException('JD không tồn tại');
+    if (!jd) throw new NotFoundException('Job description was not found');
     return {
       id: jd.id,
       jobTitle: jd.jobTitle,

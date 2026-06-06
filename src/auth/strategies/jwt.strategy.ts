@@ -13,8 +13,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub: string; email: string; mezonId: string }) {
-    // Object này sẽ được gắn vào req.user
+  validate(payload: { sub: string; email: string; mezonId: string }) {
     return {
       sub: payload.sub,
       email: payload.email,

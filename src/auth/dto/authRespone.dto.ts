@@ -7,5 +7,5 @@ export class AuthResponseDto {
     avatarUrl: string | null;
     provider: string;
     isVerified: boolean;
-  }
+  };
 }

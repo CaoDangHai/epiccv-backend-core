@@ -3,16 +3,16 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { PassportModule } from '@nestjs/passport'; 
+import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { JwtStrategy } from './strategies/jwt.strategy'; 
+import { JwtStrategy } from './strategies/jwt.strategy';
 import { Candidate } from '@entities/candidate.entity';
 
 @Module({
   imports: [
     HttpModule,
-    PassportModule,               
+    PassportModule,
     TypeOrmModule.forFeature([Candidate]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -23,8 +23,8 @@ import { Candidate } from '@entities/candidate.entity';
       }),
     }),
   ],
-  providers: [AuthService, JwtStrategy], 
+  providers: [AuthService, JwtStrategy],
   controllers: [AuthController],
-  exports: [AuthService, JwtStrategy],   
+  exports: [AuthService, JwtStrategy],
 })
 export class AuthModule {}

@@ -48,20 +48,17 @@ export class CurriculumVitae {
   @Column({ type: 'jsonb', nullable: true, name: 'top_strengths' })
   topStrengths!: string[];
 
-  // NOT NULL dựa theo SQL
   @Column({ type: 'jsonb', name: 'parsed_data' })
   parsedData!: Record<string, any>;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt!: Date;
 
-  // Quan hệ
   @ManyToOne(() => Candidate, (candidate) => candidate.cvs, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'candidate_id' })
   candidate!: Candidate;
-
 
   @OneToMany(() => AnalysisResult, (ar) => ar.cv)
   analysisResults!: AnalysisResult[];

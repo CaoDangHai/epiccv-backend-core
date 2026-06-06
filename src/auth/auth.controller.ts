@@ -1,15 +1,12 @@
-import {
-  Controller,
-  Post,
-  Body,
-  Get,
-  Query,
-  UseGuards,
-  Req,
-} from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto } from './dto';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
+interface RequestWithUser extends Request {
+  user: { sub: string; email: string; mezonId: string };
+}
 
 @Controller('auth')
 export class AuthController {
@@ -33,14 +30,13 @@ export class AuthController {
     return this.authService.loginWithMezon(code, state);
   }
 
-  // ✅ Endpoint lấy thông tin user hiện tại từ token
   @Get('me')
-  async getCurrentUser(@Req() req: any) {
-    const user = req.user; // Từ JWT payload
+  @UseGuards(JwtAuthGuard)
+  getCurrentUser(@Req() req: RequestWithUser) {
     return {
-      id: user.id,
-      email: user.email,
-      // Hoặc lấy từ DB để đầy đủ thông tin
+      id: req.user.sub,
+      email: req.user.email,
+      mezonId: req.user.mezonId,
     };
   }
 }
