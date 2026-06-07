@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DeepPartial } from 'typeorm';
-import axios from 'axios';
 import FormData from 'form-data';
 import { Subject } from 'rxjs';
 import * as crypto from 'crypto';
@@ -19,6 +18,7 @@ import { CurriculumVitae } from '../database/entities/curriculum-vitae.entity';
 import { JobDescription } from '../database/entities/job-description.entity';
 import { AnalysisResult } from '../database/entities/analysis-result.entity';
 import { extractTextFromFile } from '../utils/extractText';
+import { normalizeAiServerUrl, postToAi } from '../utils/aiClient';
 import 'multer';
 import {
   CVExtractionResponse,
@@ -55,7 +55,9 @@ export class CvService {
     @InjectRepository(AnalysisResult)
     private analysisRepo: Repository<AnalysisResult>,
   ) {
-    this.aiServerUrl = process.env.AI_SERVER_URL || 'http://localhost:8000';
+    this.aiServerUrl = normalizeAiServerUrl(
+      process.env.AI_SERVER_URL || 'http://localhost:8000',
+    );
     this.publicBaseUrl =
       process.env.PUBLIC_BASE_URL ||
       `http://localhost:${process.env.PORT ?? 3000}`;
@@ -312,15 +314,9 @@ export class CvService {
       contentType: 'text/plain; charset=utf-8',
     });
 
-    const response = await axios.post<T>(
-      `${this.aiServerUrl}${endpoint}`,
-      formData,
-      {
-        headers: { ...formData.getHeaders(), 'Content-Length': undefined },
-      },
-    );
-
-    return response.data;
+    return postToAi<T>(this.aiServerUrl, endpoint, formData, {
+      headers: { ...formData.getHeaders(), 'Content-Length': undefined },
+    });
   }
 
   private saveUploadedFile(
@@ -395,14 +391,14 @@ export class CvService {
         cv_data: this.sanitizeCvForCompare(cvData),
         jd_data: this.sanitizeJdForCompare(jdData),
       };
-      const response = await axios.post<CompareResponse>(
-        `${this.aiServerUrl}/ai/compare`,
+      compareResult = await postToAi<CompareResponse>(
+        this.aiServerUrl,
+        '/ai/compare',
         payload,
         {
           headers: { 'Content-Type': 'application/json' },
         },
       );
-      compareResult = response.data;
     } catch (error: unknown) {
       throw this.handleError(
         error,
@@ -513,6 +509,11 @@ export class CvService {
       if (status === 500) {
         return new InternalServerErrorException(
           typeof responseData === 'string' ? responseData : 'AI server error',
+        );
+      }
+      if (status && [502, 503, 504].includes(status)) {
+        return new InternalServerErrorException(
+          'AI server is waking up or temporarily unavailable. Please try again shortly.',
         );
       }
     }

@@ -4,16 +4,17 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Subject } from 'rxjs';
 import * as crypto from 'crypto';
-import axios from 'axios';
 import { Roadmap } from '../database/entities/roadmap.entity';
 import { RoadmapStep } from '../database/entities/roadmap-step.entity';
 import { RoadmapResource } from '../database/entities/roadmap-resource.entity';
 import { AnalysisResult } from '../database/entities/analysis-result.entity';
+import { normalizeAiServerUrl, postToAi } from '../utils/aiClient';
 
 @Injectable()
 export class RoadmapService {
-  private readonly aiServerUrl =
-    process.env.AI_SERVER_URL || 'http://localhost:8000';
+  private readonly aiServerUrl = normalizeAiServerUrl(
+    process.env.AI_SERVER_URL || 'http://localhost:8000',
+  );
   private readonly jobStreams = new Map<string, Subject<MessageEvent>>();
 
   constructor(
@@ -114,11 +115,11 @@ export class RoadmapService {
           message: 'AI is building the detailed roadmap...',
         },
       });
-      const response = await axios.post(
-        `${this.aiServerUrl}/ai/generate-roadmap`,
+      const roadmapResult = await postToAi<any>(
+        this.aiServerUrl,
+        '/ai/generate-roadmap',
         compareResult,
       );
-      const roadmapResult = response.data;
 
       subject.next({
         data: { progress: 85, message: 'Saving roadmap data...' },
