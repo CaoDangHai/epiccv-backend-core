@@ -3,6 +3,7 @@ import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto } from './dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { MezonLoginDto } from './dto/mezon-login.dto';
 
 interface RequestWithUser extends Request {
   user: { sub: string; email: string; mezonId: string };
@@ -22,12 +23,14 @@ export class AuthController {
     return this.authService.loginLocal(data);
   }
 
+  @Get('mezon/state')
+  getMezonState() {
+    return this.authService.generateMezonState();
+  }
+
   @Post('mezon')
-  async loginWithMezon(
-    @Body('code') code: string,
-    @Body('state') state: string,
-  ) {
-    return this.authService.loginWithMezon(code, state);
+  async loginWithMezon(@Body() dto: MezonLoginDto) {
+    return this.authService.loginWithMezon(dto);
   }
 
   @Get('me')

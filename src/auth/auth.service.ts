@@ -12,6 +12,8 @@ import { Repository } from 'typeorm';
 import { firstValueFrom } from 'rxjs';
 import { Candidate } from '@entities/candidate.entity';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
+
 import { AxiosError } from 'axios';
 
 import {
@@ -19,6 +21,7 @@ import {
   AuthResponseDto,
   MezonUserInfoDto,
   RegisterDto,
+  MezonLoginDto,
 } from './dto';
 
 @Injectable()
@@ -31,6 +34,12 @@ export class AuthService {
     private readonly candidateRepository: Repository<Candidate>,
   ) {}
 
+  // Sinh JWT State
+  generateMezonState(): { state: string } {
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const stateToken = this.jwtService.sign({ nonce }, { expiresIn: '5m' });
+    return { state: stateToken };
+  }
   async registerLocal(data: RegisterDto): Promise<AuthResponseDto> {
     const existingUser = await this.candidateRepository.findOne({
       where: { email: data.email },
@@ -75,8 +84,16 @@ export class AuthService {
     return this.createAuthResponse(candidate);
   }
 
-  async loginWithMezon(code: string, state: string): Promise<AuthResponseDto> {
-    const mezonToken = await this.exchangeCodeForToken(code, state);
+  async loginWithMezon(dto: MezonLoginDto): Promise<AuthResponseDto> {
+    try {
+      this.jwtService.verify(dto.state);
+    } catch {
+      throw new UnauthorizedException(
+        'State OAuth không hợp lệ hoặc đã hết hạn (Phát hiện nghi ngờ CSRF).',
+      );
+    }
+
+    const mezonToken = await this.exchangeCodeForToken(dto.code, dto.state);
     const userInfo = await this.getMezonUserInfo(mezonToken);
     const candidate = await this.validateAndSaveUser(userInfo);
 
@@ -134,11 +151,14 @@ export class AuthService {
       return response.data.access_token;
     } catch (e: unknown) {
       const axiosError = e as AxiosError;
-      console.error('=== MEZON ERROR ===');
-      console.error('Status:', axiosError.response?.status);
-      console.error('Data:', JSON.stringify(axiosError.response?.data));
-      console.error('redirect_uri:', redirectUri);
-      console.error('code:', code);
+      const safeErrorMessage =
+        axiosError.response?.data || axiosError.message || 'Unknown Error';
+
+      console.error(`=== MEZON OAUTH ERROR ===`);
+      console.error(`Status: ${axiosError.response?.status}`);
+      console.error(`Error Details: ${JSON.stringify(safeErrorMessage)}`);
+      // Đã loại bỏ hoàn toàn việc log code và redirect_uri
+
       throw new UnauthorizedException(
         'Mezon authorization code is invalid or expired',
       );
@@ -184,20 +204,23 @@ export class AuthService {
         const existingEmailCandidate = await this.candidateRepository.findOne({
           where: { email },
         });
+
+        // NẾU TỒN TẠI EMAIL NHƯNG CHƯA LINK MEZON ID -> CHẶN ĐĂNG NHẬP
         if (existingEmailCandidate) {
-          existingEmailCandidate.mezonId = mezonId;
-          existingEmailCandidate.avatarUrl = avatarUrl;
-          return this.candidateRepository.save(existingEmailCandidate);
+          throw new ConflictException(
+            'Email này đã được đăng ký bằng tài khoản hệ thống. Vui lòng đăng nhập bằng mật khẩu và liên kết với Mezon trong Cài đặt.',
+          );
         }
       }
 
+      // NẾU EMAIL HOÀN TOÀN MỚI -> TẠO TÀI KHOẢN MỚI
       candidate = this.candidateRepository.create({
         mezonId,
         email,
         fullName,
         avatarUrl,
         provider: 'mezon',
-        isVerified: true,
+        isVerified: true, // Mezon đã xác thực email giúp chúng ta, nên tạm thời set isVerified = true cho các tài khoản đăng nhập qua Mezon. Nếu sau này có yêu cầu xác thực email riêng, chúng ta có thể thêm bước xác thực email sau khi đăng nhập qua Mezon.
       });
       return this.candidateRepository.save(candidate);
     }
