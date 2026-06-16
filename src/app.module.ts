@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import * as Joi from 'joi';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -17,7 +18,15 @@ import { CandidateModule } from './candidate/candidate.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    // <--- SỬA ĐỔI: Thêm khối validationSchema vào ConfigModule
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validationSchema: Joi.object({
+        JWT_SECRET: Joi.string().required(),
+      }),
+    }),
+
+    // Toàn bộ phần dưới đây GIỮ NGUYÊN của bạn
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
