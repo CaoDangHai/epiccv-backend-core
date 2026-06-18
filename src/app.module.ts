@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule } from '@nestjs/throttler';
 import * as Joi from 'joi';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -18,7 +19,12 @@ import { CandidateModule } from './candidate/candidate.module';
 
 @Module({
   imports: [
-    // <--- SỬA ĐỔI: Thêm khối validationSchema vào ConfigModule
+    // Bật Rate Limit (10 request / 60 giây)
+    ThrottlerModule.forRoot([{
+      ttl: 60000,
+      limit: 10,
+    }]),
+
     ConfigModule.forRoot({
       isGlobal: true,
       validationSchema: Joi.object({
@@ -26,7 +32,6 @@ import { CandidateModule } from './candidate/candidate.module';
       }),
     }),
 
-    // Toàn bộ phần dưới đây GIỮ NGUYÊN của bạn
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -55,4 +60,4 @@ import { CandidateModule } from './candidate/candidate.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

@@ -1,4 +1,4 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsNotEmpty } from 'class-validator';
 import { LoginDto } from './login.dto';
 
 export class RegisterDto extends LoginDto {
@@ -6,7 +6,7 @@ export class RegisterDto extends LoginDto {
   @IsOptional()
   fullName?: string;
 
-  @IsString()
-  @IsOptional()
-  turnstileToken?: string;
-}
+  @IsString({ message: 'Turnstile token phải là chuỗi' })
+  @IsNotEmpty({ message: 'Thiếu mã xác thực Cloudflare Turnstile (Chống Bot)' })
+  turnstileToken!: string;
+} 

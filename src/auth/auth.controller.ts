@@ -4,14 +4,16 @@ import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto } from './dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { MezonLoginDto } from './dto/mezon-login.dto';
+import { ThrottlerGuard } from '@nestjs/throttler';
 
 interface RequestWithUser extends Request {
   user: { sub: string; email: string; mezonId: string };
 }
 
 @Controller('auth')
+@UseGuards(ThrottlerGuard)
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('register')
   async register(@Body() data: RegisterDto) {
@@ -30,6 +32,7 @@ export class AuthController {
 
   @Post('mezon')
   async loginWithMezon(@Body() dto: MezonLoginDto) {
+
     return this.authService.loginWithMezon(dto);
   }
 

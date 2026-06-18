@@ -2,7 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   InternalServerErrorException,
-  ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
@@ -13,7 +13,6 @@ import { firstValueFrom } from 'rxjs';
 import { Candidate } from '@entities/candidate.entity';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-
 import { AxiosError } from 'axios';
 
 import {
@@ -32,21 +31,50 @@ export class AuthService {
     private readonly jwtService: JwtService,
     @InjectRepository(Candidate)
     private readonly candidateRepository: Repository<Candidate>,
-  ) {}
+  ) { }
 
-  // Sinh JWT State
   generateMezonState(): { state: string } {
     const nonce = crypto.randomBytes(16).toString('hex');
-    const stateToken = this.jwtService.sign({ nonce }, { expiresIn: '5m' });
+    const stateToken = this.jwtService.sign({ nonce }, { expiresIn: '15m' });
     return { state: stateToken };
   }
+
   async registerLocal(data: RegisterDto): Promise<AuthResponseDto> {
+    // 1. Xác thực Cloudflare Turnstile qua HTTP API
+    const formData = new URLSearchParams();
+    formData.append('secret', this.configService.get<string>('TURNSTILE_SECRET_KEY') || '');
+    formData.append('response', data.turnstileToken);
+
+    let isTurnstileSuccess = false;
+    try {
+      const turnstileRes = await firstValueFrom(
+        this.httpService.post('https://challenges.cloudflare.com/turnstile/v0/siteverify', formData.toString(), {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        })
+      );
+      isTurnstileSuccess = turnstileRes.data.success;
+    } catch (error: unknown) {
+      const axiosError = error as AxiosError;
+
+      const errorData = (axiosError.response?.data as any);
+      const errorMessage = errorData?.message || axiosError.message;
+
+      console.error("=== LỖI TURNSTILE CHÍNH XÁC ===", errorMessage);
+      throw new BadRequestException('Lỗi kết nối đến máy chủ Cloudflare.');
+    }
+
+    if (!isTurnstileSuccess) {
+      throw new BadRequestException('Xác thực Bot (Turnstile) thất bại. Vui lòng tick lại vào ô xác minh.');
+    }
+
+    // 2. Kiểm tra Account Enumeration
     const existingUser = await this.candidateRepository.findOne({
       where: { email: data.email },
     });
 
     if (existingUser) {
-      throw new ConflictException('EMAIL_ALREADY_EXISTS');
+      // Làm mờ lỗi thay vì báo thẳng "EMAIL_ALREADY_EXISTS"
+      throw new BadRequestException('Đăng ký thất bại. Vui lòng kiểm tra lại thông tin.');
     }
 
     const hashedPassword = await bcrypt.hash(data.password, 10);
@@ -55,7 +83,7 @@ export class AuthService {
       fullName: data.fullName || 'EpicCV User',
       passwordHash: hashedPassword,
       provider: 'local',
-      isVerified: false,
+      isVerified: true,
     });
 
     const savedCandidate = await this.candidateRepository.save(candidate);
@@ -70,7 +98,7 @@ export class AuthService {
       .getOne();
 
     if (!candidate || !candidate.passwordHash) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Email hoặc mật khẩu không chính xác.');
     }
 
     const isPasswordMatching = await bcrypt.compare(
@@ -78,7 +106,12 @@ export class AuthService {
       candidate.passwordHash,
     );
     if (!isPasswordMatching) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Email hoặc mật khẩu không chính xác.');
+    }
+
+    // TỪ CHỐI CẤP TOKEN NẾU TÀI KHOẢN CHƯA XÁC MINH
+    if (candidate.isVerified === false) {
+      throw new UnauthorizedException('Tài khoản chưa được xác minh. Vui lòng kiểm tra email để kích hoạt.');
     }
 
     return this.createAuthResponse(candidate);
@@ -151,14 +184,8 @@ export class AuthService {
       return response.data.access_token;
     } catch (e: unknown) {
       const axiosError = e as AxiosError;
-      const safeErrorMessage =
-        axiosError.response?.data || axiosError.message || 'Unknown Error';
-
       console.error(`=== MEZON OAUTH ERROR ===`);
       console.error(`Status: ${axiosError.response?.status}`);
-      console.error(`Error Details: ${JSON.stringify(safeErrorMessage)}`);
-      // Đã loại bỏ hoàn toàn việc log code và redirect_uri
-
       throw new UnauthorizedException(
         'Mezon authorization code is invalid or expired',
       );
@@ -189,9 +216,9 @@ export class AuthService {
     const email: string | null = userInfo.email ? String(userInfo.email) : null;
     const fullName: string = String(
       userInfo.display_name ||
-        userInfo.username ||
-        userInfo.name ||
-        'Mezon User',
+      userInfo.username ||
+      userInfo.name ||
+      'Mezon User',
     );
     const avatarUrl: string = String(userInfo.avatar || userInfo.picture || '');
 
@@ -205,22 +232,28 @@ export class AuthService {
           where: { email },
         });
 
-        // NẾU TỒN TẠI EMAIL NHƯNG CHƯA LINK MEZON ID -> CHẶN ĐĂNG NHẬP
+        // NẾU TỒN TẠI EMAIL DO LOCAL TẠO TRƯỚC ĐÓ -> TỊCH THU TÀI KHOẢN
         if (existingEmailCandidate) {
-          throw new ConflictException(
-            'Email này đã được đăng ký bằng tài khoản hệ thống. Vui lòng đăng nhập bằng mật khẩu và liên kết với Mezon trong Cài đặt.',
-          );
+          existingEmailCandidate.mezonId = mezonId;
+          existingEmailCandidate.provider = 'mezon'; // Đổi định danh sang Mezon
+          // Đổi mật khẩu thành chuỗi ngẫu nhiên để vô hiệu hóa mật khẩu Local cũ
+          existingEmailCandidate.passwordHash = await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10);
+          existingEmailCandidate.isVerified = true;
+
+          if (avatarUrl) existingEmailCandidate.avatarUrl = avatarUrl;
+          if (fullName) existingEmailCandidate.fullName = fullName;
+
+          return this.candidateRepository.save(existingEmailCandidate);
         }
       }
 
-      // NẾU EMAIL HOÀN TOÀN MỚI -> TẠO TÀI KHOẢN MỚI
       candidate = this.candidateRepository.create({
         mezonId,
         email,
         fullName,
         avatarUrl,
         provider: 'mezon',
-        isVerified: true, // Mezon đã xác thực email giúp chúng ta, nên tạm thời set isVerified = true cho các tài khoản đăng nhập qua Mezon. Nếu sau này có yêu cầu xác thực email riêng, chúng ta có thể thêm bước xác thực email sau khi đăng nhập qua Mezon.
+        isVerified: true,
       });
       return this.candidateRepository.save(candidate);
     }
@@ -238,4 +271,4 @@ export class AuthService {
     candidate.avatarUrl = avatarUrl || candidate.avatarUrl;
     return this.candidateRepository.save(candidate);
   }
-}
+} 

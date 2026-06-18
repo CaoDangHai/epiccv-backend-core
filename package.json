@@ -37,6 +37,8 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.2.7",
     "@nestjs/typeorm": "^10.0.1",
+    "@nestjs/throttler": "^5.1.2",
+    "helmet": "^7.1.0",
     "axios": "^1.15.2",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
@@ -99,5 +101,12 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
+  },
+  "resolutions": {
+    "fast-uri": "^3.0.1",
+    "qs": "^6.13.0",
+    "brace-expansion": "^2.0.1",
+    "uuid": "^10.0.0",
+    "axios": "^1.7.2"
   }
 }
